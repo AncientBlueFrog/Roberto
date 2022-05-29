@@ -8,7 +8,7 @@
 /*
 Project: Roberto
 Author: AncientBlueFrog
-Version: 0.6(Beta)
+Version: 0.7(Beta)
 */
 
 int add_project(stack *, char *);
@@ -25,7 +25,7 @@ stack *pilha;
 char *version;
 int main(int argc, char *argv[])
 {
-    version = "0.6";
+    version = "0.7";
     profile_name = NULL;
     pilha = stack_init(15, 5);
     config_obj = malloc(sizeof(mcp));
