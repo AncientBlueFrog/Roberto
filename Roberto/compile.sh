@@ -1,4 +1,5 @@
+rm Makefile
 make -B 
 
-cp ./mmf testfolder/
-cp ./mmf testfolder/proj2/
+cp ./roberto testfolder/
+cp ./roberto testfolder/proj2/

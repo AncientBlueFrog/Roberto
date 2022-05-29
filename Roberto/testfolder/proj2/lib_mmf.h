@@ -34,11 +34,13 @@ struct Project *create_project(char *);
 void close_project(project *);
 
 // mmf_config
-int mmf_config_loader(mcp *, FILE *);
+int mmf_config_file_loader(mcp *, FILE *);
+int mmf_config_string_loader(mcp *, char *);
 void mmf_remove_profile(mcp *);
 mcp *mmf_profile_init(char *, int, stack *);
 mcp *create_makefile_buffer(char *);
 
 // mmf_data_processor
+int mmf_config_writer(mcp *, FILE *);
 int makefile_generator(project *, mcp *);
 // Soli Deo Gloria.
