@@ -107,7 +107,7 @@ int makefile_generator(project *p, mcp *profile)
         {
             if (!stack_lstr_search(stack_i_headers, (char *)stack_get(stack_files, j)))
             {
-                printf("%s,  ", (char *)stack_get(stack_files, j));
+                // printf("%s,  ", (char *)stack_get(stack_files, j));
                 fprintf(makefile, "%s ", (char *)stack_get(stack_files, j));
             }
         }
@@ -167,8 +167,8 @@ char *search_deps(stack *haystack, char *dep)
 
 cf_buffer *c_file_interpreter(char *file_name, project *p, mcp *profile, stack *history)
 {
-    printf("%s:\n", file_name);
-    //  Get file name path to open file.
+    // printf("%s:\n", file_name);
+    //   Get file name path to open file.
     int fnl = strlen(file_name);
     char *file_name_path = malloc(fnl + p->path_length + 1);
     file_name_path = strcpy(file_name_path, p->path);
@@ -222,7 +222,7 @@ cf_buffer *c_file_interpreter(char *file_name, project *p, mcp *profile, stack *
         cb = fgetc(file);
         if (cb == EOF)
         {
-            printf("EOF\n");
+            // printf("EOF\n");
         }
         // Switch for start modes.
         switch (cb)
@@ -247,6 +247,9 @@ cf_buffer *c_file_interpreter(char *file_name, project *p, mcp *profile, stack *
         case '(':
             if (next_blockm == no_block)
                 next_blockm = parenthesis;
+
+            if (next_blockm == parenthesis)
+                pcount++;
             break;
         case '#':
             if (next_blockm == no_block)
@@ -311,7 +314,13 @@ cf_buffer *c_file_interpreter(char *file_name, project *p, mcp *profile, stack *
             break;
         case ')':
             if (next_blockm == parenthesis)
-                next_blockm = no_block;
+            {
+                pcount--;
+                if (pcount == 0)
+                {
+                    next_blockm = no_block;
+                }
+            }
 
             break;
         case '>':
@@ -512,9 +521,9 @@ cf_buffer *c_file_interpreter(char *file_name, project *p, mcp *profile, stack *
             continue;
         }
 
-        printf("goto %s\n", identifier);
+        // printf("goto %s\n", identifier);
         cf_buffer *header_buffer = c_file_interpreter(header_carrier, p, profile, buffer_ret->history);
-        printf("%s:\n", file_name);
+        // printf("%s:\n", file_name);
 
         if (!header_buffer)
         {
@@ -548,7 +557,7 @@ cf_buffer *c_file_interpreter(char *file_name, project *p, mcp *profile, stack *
 */
             if (stack_lstr_search(lib_buffer->function_references, stack_get(stack_function, i)))
             {
-                printf("To append: %s in %s\n", lib_buffer->name, file_name);
+                // printf("To append: %s in %s\n", lib_buffer->name, file_name);
                 stack_str_append(buffer_ret->headers, lib_buffer->headers);
                 stack_str_append(buffer_ret->external_files, lib_buffer->external_files);
                 stack_str_append(buffer_ret->function_declarations, lib_buffer->function_declarations);
@@ -570,13 +579,13 @@ cf_buffer *c_file_interpreter(char *file_name, project *p, mcp *profile, stack *
     }
     stack_close(lib_buffer_stack);
 
-    printf("%s{\n", buffer_ret->name);
+    /* printf("%s{\n", buffer_ret->name);
     for (int i = 0; i < buffer_ret->files->stack_index; i++)
     {
         printf("%s, ", (char *)stack_get(buffer_ret->files, i));
     }
-
-    printf("return\n");
+*/
+    // printf("return\n");
     return buffer_ret;
 }
 
