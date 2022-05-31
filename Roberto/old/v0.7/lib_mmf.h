@@ -1,5 +1,5 @@
-#include <dirent.h>
 #include <obj_stack.h>
+#include <dirent.h>
 #include <stdio.h>
 
 typedef struct
@@ -22,7 +22,7 @@ extern int teste;
 typedef struct makefile_config_profile
 {
     char *compiler;
-    stack *flags;
+    stack *options;
     stack *libraries;
     char *name;
     stack *parent;

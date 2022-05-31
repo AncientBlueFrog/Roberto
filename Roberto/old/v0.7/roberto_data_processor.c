@@ -9,7 +9,6 @@ typedef struct c_file_buffer cf_buffer;
 char *search_deps(stack *, char *);
 cf_buffer *c_file_interpreter(char *, project *, mcp *, stack *);
 void cf_buffer_clear(cf_buffer *b);
-int strsearch(char **, int, char *);
 
 struct c_file_buffer
 {
@@ -28,7 +27,6 @@ enum text_mode
     code,
     double_slash,
     slash_asterisk,
-    quote,
     double_quote,
     less_greater,
 };
@@ -94,8 +92,8 @@ int makefile_generator(project *p, mcp *profile)
         // compiler.
         fprintf(makefile, "%s ", profile->compiler);
 
-        // Flags.
-        stack *stack_options = profile->flags;
+        // Options.
+        stack *stack_options = profile->options;
 
         for (int j = 0; j < stack_options->stack_index; j++)
         {
@@ -137,6 +135,36 @@ int makefile_generator(project *p, mcp *profile)
     return 1;
 }
 
+// search for deps
+char *search_deps(stack *haystack, char *dep)
+{
+    // stack(libraries) > config_lib > char *
+    char *current_str;
+    for (int i = 0; i < haystack->stack_index; i++)
+    {
+        config_lib *cl_carrier = stack_get(haystack, i);
+        current_str = cl_carrier->header;
+        if (!strcmp(dep, current_str))
+        {
+            if (cl_carrier->implement)
+            {
+                return cl_carrier->implement;
+            }
+            else
+            {
+                int idenl = strlen(cl_carrier->header);
+                char *str_carrier = malloc(idenl);
+                str_carrier = strcpy(str_carrier, current_str);
+
+                if (str_carrier[idenl - 2] == '.')
+                    str_carrier[idenl - 2] = 0;
+                return str_carrier;
+            }
+        }
+    }
+    return NULL;
+}
+
 cf_buffer *c_file_interpreter(char *file_name, project *p, mcp *profile, stack *history)
 {
     // printf("%s:\n", file_name);
@@ -154,13 +182,13 @@ cf_buffer *c_file_interpreter(char *file_name, project *p, mcp *profile, stack *
     }
 
     // Get filename formated.
-    char *filenamef = strdup(file_name);
+    char *filenamef = strcopy(file_name);
     filenamef[fnl - 2] = 0;
 
     // Function variables.
     char identifier[32] = {};
-    int i = 0, cb = 0, linec = 1;
-    char *interrupt, bcount = 0, pcount = 0;
+    int i = 0, cb = 0, pb = 0, pcount = 0;
+    char interrupt = 1, infunc = 0;
     enum block_mode next_blockm = no_block, blockm = no_block;
     enum text_mode next_textm = code, textm = code;
     enum operation op = no_op;
@@ -176,54 +204,38 @@ cf_buffer *c_file_interpreter(char *file_name, project *p, mcp *profile, stack *
     buffer_ret->external_files = stack_init(10, 5);
     buffer_ret->headers = stack_init(10, 5);
     buffer_ret->history = stack_init(10, 5);
-    stack_add(buffer_ret->files, strdup(file_name));
+    stack_add(buffer_ret->files, strcopy(file_name));
 
-    // Stack of identifiears.
-    stack *identifier_stack = stack_init(10, 5);
-
-    // Keyworns of C.
-    char *keywords[5];
-    keywords[0] = "if";
-    keywords[1] = "else";
-    keywords[2] = "while";
-    keywords[3] = "for";
-    keywords[4] = "do";
-
-    // Delimiters for tokens.
-    char delim[] = {32,  10,  '#', '=', '-', ';', '+', '*', '|', '!', '%', '&', '(',
-                    ')', '/', '<', '>', '{', '}', '[', ']', ',', '"', ':', '?', 0};
-
-    // History of recursion.
     if (history)
     {
         stack_str_copy(buffer_ret->history, history);
     }
 
-    stack_add(buffer_ret->history, strdup(file_name));
+    stack_add(buffer_ret->history, strcopy(file_name));
 
     while (cb != EOF)
     {
+        interrupt = 1;
+        pb = cb;
         blockm = next_blockm;
         textm = next_textm;
         cb = fgetc(file);
-
-        interrupt = strchr(delim, cb);
         if (cb == EOF)
         {
             // printf("EOF\n");
         }
-
         // Switch for start modes.
-
         switch (cb)
         {
         case 32:
-
+            if (next_textm == double_quote)
+            {
+                interrupt = 0;
+            }
             break;
         case 9:
             break;
         case 10:
-            linec++;
             if (next_textm == double_slash)
                 next_textm = code;
             else if (next_blockm == hashtag)
@@ -233,10 +245,11 @@ cf_buffer *c_file_interpreter(char *file_name, project *p, mcp *profile, stack *
             }
             break;
         case '(':
-            pcount++;
             if (next_blockm == no_block)
                 next_blockm = parenthesis;
 
+            if (next_blockm == parenthesis)
+                pcount++;
             break;
         case '#':
             if (next_blockm == no_block)
@@ -244,13 +257,17 @@ cf_buffer *c_file_interpreter(char *file_name, project *p, mcp *profile, stack *
 
             break;
         case ';':
+            if (op == function)
+                infunc++;
 
             break;
         case '=':
+            if (op == function)
+                infunc++;
 
             break;
         case '}':
-            bcount--;
+            infunc = 0;
             break;
         case '/':
             cb = fgetc(file);
@@ -268,9 +285,8 @@ cf_buffer *c_file_interpreter(char *file_name, project *p, mcp *profile, stack *
         case '*':
             if (next_textm == slash_asterisk)
             {
-                // identifier[i] = cb;
-                // i++;
-
+                identifier[i] = cb;
+                i++;
                 cb = fgetc(file);
                 if (cb == '/')
                     next_textm = code;
@@ -291,26 +307,19 @@ cf_buffer *c_file_interpreter(char *file_name, project *p, mcp *profile, stack *
                 next_textm = double_quote;
             }
             break;
-        case 39:
-            if (next_textm == quote)
-            {
-                next_textm = code;
-            }
-            else if (next_textm == code)
-            {
-                next_textm = quote;
-            }
-            break;
-
         case '<':
+
             if (next_textm == code)
                 next_textm = less_greater;
             break;
         case ')':
-            pcount--;
             if (next_blockm == parenthesis)
             {
-                next_blockm = no_block;
+                pcount--;
+                if (pcount == 0)
+                {
+                    next_blockm = no_block;
+                }
             }
 
             break;
@@ -320,137 +329,134 @@ cf_buffer *c_file_interpreter(char *file_name, project *p, mcp *profile, stack *
 
             break;
         case '{':
-            bcount++;
+            if (op == function)
+                infunc += 2;
+            break;
+        default:
+            interrupt = 0;
             break;
         }
 
-        if ((next_textm == double_quote) && (cb != '"'))
-        {
-            interrupt = 0;
-        }
-
-        if ((next_textm == quote) && (cb != 39))
-        {
-            interrupt = 0;
-        }
         // Continue to while if it is a comment.
-        if ((next_textm == slash_asterisk) || (next_textm == double_slash) ||
-            ((blockm == parenthesis) && (bcount == 0)))
+        if ((next_textm == slash_asterisk) || (next_textm == double_slash) || (blockm == parenthesis))
         {
             continue;
         }
 
-        if (interrupt)
+        if (interrupt || (pb == 32) || (pb == 10))
         {
             if (i > 0)
             {
                 identifier[i] = 0;
-                stack_add(identifier_stack, strdup(identifier));
-            }
-
-            if (identifier_stack->stack_index > 0)
-            {
-                char *identifier_carrier = stack_get(identifier_stack, TOP);
-
-                switch ((int)op)
+                if ((strcmp(identifier, "if")) && (strcmp(identifier, "do")) && (strcmp(identifier, "else")) &&
+                    (strcmp(identifier, "for")) && (strcmp(identifier, "while")))
                 {
 
-                case inclusion:
-                    if ((textm == double_quote) && cb == '"')
+                    switch ((int)op)
                     {
-                        if ((!stack_lstr_search(buffer_ret->headers, identifier_carrier)) &&
-                            (!stack_lstr_search(buffer_ret->history, identifier_carrier)))
+                    case inclusion:
+                        if ((textm == double_quote) && cb == '"')
                         {
-                            // printf("\tHEADERS: %s from %s\n", identifier_carrier, file_name);
-                            stack_add(buffer_ret->headers, strdup(identifier_carrier));
-                        }
-                        op = no_op;
-                        stack_clear(identifier_stack);
-                    }
-                    else if ((textm == less_greater) && cb == '>')
-                    {
-                        if (!stack_lstr_search(buffer_ret->headers, identifier_carrier))
-                        {
-                            char *ef_carrier = search_deps(profile->libraries, identifier_carrier);
-
-                            if (ef_carrier)
+                            if ((!stack_lstr_search(buffer_ret->headers, identifier)) &&
+                                (!stack_lstr_search(buffer_ret->headers, identifier)) &&
+                                (!stack_lstr_search(buffer_ret->history, identifier)))
                             {
-                                // printf("\tTO LINK: %s from %s\n", identifier_carrier, file_name);
-                                stack_add(buffer_ret->external_files, strdup(ef_carrier));
+                                // printf("\tHEADERS: %s from %s\n", identifier, file_name);
+
+                                stack_add(buffer_ret->headers, strcopy(identifier));
                             }
+                            op = no_op;
                         }
-                        op = no_op;
-                        stack_clear(identifier_stack);
-                    }
-                    break;
-                case function:
-                    // infunc 1 and infunc = 4 are invalid.
-                    // ';' = 1, '(' = 1, '{' = 2
-                    if (strsearch(keywords, 5, identifier_carrier))
-                    {
-                        op = no_op;
+                        else if ((textm == less_greater) && cb == '>')
+                        {
+                            if (!stack_lstr_search(buffer_ret->headers, identifier))
+                            {
+                                char *ef_carrier = search_deps(profile->libraries, identifier);
+
+                                if (ef_carrier)
+                                {
+                                    // printf("\tTO LINK: %s from %s\n", identifier, file_name);
+                                    stack_add(buffer_ret->external_files, strcopy(ef_carrier));
+                                }
+                            }
+                            op = no_op;
+                        }
+                        break;
+                    case function:
+                        // infunc 1 and infunc = 4 are invalid.
+                        // ';' = 1, '(' = 1, '{' = 2
+                        if (infunc == 2) // 1 * '(' + 1 * ';'.
+                        {
+                            if (!stack_lstr_search(buffer_ret->function_declarations, identifier))
+                            {
+                                // printf("\tFUNCTION DECLARATIONS: %s from %s\n", identifier, buffer_ret->name);
+                                stack_add(buffer_ret->function_declarations, strcopy(identifier));
+                            }
+                            infunc = 0;
+                            op = no_op;
+                        }
+                        else if (infunc == 3) // 1 * '(' + 1 * '{'.
+                        {
+                            // If indentifier != main and identifier != function_references_stack.
+
+                            if (strcmp(identifier, "main"))
+                            {
+                                if (!stack_lstr_search(buffer_ret->function_references, identifier))
+                                {
+                                    // printf("\tFUNCTION REFERENCES: %s from %s\n", identifier, buffer_ret->name);
+                                    stack_add(buffer_ret->function_references, strcopy(identifier));
+                                }
+                            }
+                            op = no_op;
+                        }
+                        else if ((infunc >= 4) && (strcmp(identifier, "if"))) // 1 * '(' + 1 * '{' + 1 * '('+ 1 * ';'.
+                        {
+                            if (!stack_lstr_search(buffer_ret->function_calls, identifier))
+                            {
+                                // printf("\tFUNCTION CALLS: %s from %s\n", identifier, buffer_ret->name);
+                                stack_add(buffer_ret->function_calls, strcopy(identifier));
+                            }
+                            infunc = 3;
+                            op = no_op;
+                        }
                         break;
                     }
-
-                    if ((bcount == 0) && (cb == ';')) // 1 * '(' + 1 * ';'.
-                    {
-                        if (!stack_lstr_search(buffer_ret->function_declarations, identifier_carrier))
-                        {
-                            // printf("\tFUNCTION DECLARATIONS: %s from %s\n", identifier_carrier, buffer_ret->name);
-                            stack_add(buffer_ret->function_declarations, strdup(identifier_carrier));
-                        }
-                        op = no_op;
-                        stack_clear(identifier_stack);
-                    }
-                    else if ((bcount <= 1) && (cb == '{')) // 1 * '(' + 1 * '{'.
-                    {
-                        // If indentifier != main and identifier != function_references_stack.
-                        if (strcmp(identifier_carrier, "main"))
-                        {
-                            if (!stack_lstr_search(buffer_ret->function_references, identifier_carrier))
-                            {
-                                // printf("\tFUNCTION REFERENCES: %s from %s(line %d)\n", identifier_carrier,
-                                //        buffer_ret->name, linec);
-                                stack_add(buffer_ret->function_references, strdup(identifier_carrier));
-                            }
-                        }
-                        op = no_op;
-                        stack_clear(identifier_stack);
-                    }
-                    else if ((bcount >= 1) && (cb == '('))
-                    {
-                        if (!stack_lstr_search(buffer_ret->function_calls, identifier_carrier))
-                        {
-                            // printf("\tFUNCTION CALLS: %s from %s\n", identifier_carrier, buffer_ret->name);
-                            stack_add(buffer_ret->function_calls, strdup(identifier_carrier));
-                        }
-                        op = no_op;
-                        stack_clear(identifier_stack);
-                    }
-                    break;
                 }
-
-                while (i > 0)
+            }
+            // Define the mode of next identifier.
+            if ((blockm == hashtag) && !strcmp(identifier, "include"))
+            {
+                op = inclusion;
+            }
+            else if (cb == '(')
+            {
+                if (infunc != 1)
                 {
-                    identifier[i] = 0;
-                    i--;
-                }
-
-                // Define the mode of next identifier.
-                if ((blockm == hashtag) && !strcmp(identifier_carrier, "include"))
-                {
-                    op = inclusion;
-                }
-
-                if (cb == '(')
-                {
+                    infunc++;
                     op = function;
                 }
             }
+
+            // clear identifier.
+            if ((cb != 32) && (cb != 10) && !((infunc == 1) || (infunc == 4)))
+            {
+                for (int j = i; j >= 0; j--)
+                {
+                    identifier[j] = 0;
+                }
+                i = 0;
+            }
+
+            if ((!interrupt) && (cb != 32) && (cb != '{') && (cb != '!') && (cb != 39) && (cb != '&') && (cb != '|') &&
+                (i <= 30))
+            {
+                identifier[i] = (char)cb;
+                i++;
+            }
         }
-        else
+        else if (blockm != parenthesis)
         {
-            if (i < 31)
+            if ((i <= 30) && (cb != 32) && (cb != '{') && (cb != '!') && (cb != 39) && (cb != '&') && (cb != '|'))
             {
                 identifier[i] = (char)cb;
                 i++;
@@ -470,6 +476,7 @@ cf_buffer *c_file_interpreter(char *file_name, project *p, mcp *profile, stack *
 
     stack *header_name_stack = buffer_ret->headers;
     char *header_carrier;
+    cf_buffer *header_buffer;
 
     for (int i = 0; i < lib_name_stack->stack_index; i++)
     {
@@ -547,7 +554,7 @@ cf_buffer *c_file_interpreter(char *file_name, project *p, mcp *profile, stack *
                 }
                 printf("\n");
             }
-    */
+*/
             if (stack_lstr_search(lib_buffer->function_references, stack_get(stack_function, i)))
             {
                 // printf("To append: %s in %s\n", lib_buffer->name, file_name);
@@ -577,7 +584,7 @@ cf_buffer *c_file_interpreter(char *file_name, project *p, mcp *profile, stack *
     {
         printf("%s, ", (char *)stack_get(buffer_ret->files, i));
     }
-    */
+*/
     // printf("return\n");
     return buffer_ret;
 }
@@ -593,47 +600,4 @@ void cf_buffer_clear(cf_buffer *b)
     free(b->name);
 }
 
-// search for deps
-char *search_deps(stack *haystack, char *dep)
-{
-    // stack(libraries) > config_lib > char *
-    char *current_str;
-    for (int i = 0; i < haystack->stack_index; i++)
-    {
-        config_lib *cl_carrier = stack_get(haystack, i);
-        current_str = cl_carrier->header;
-        if (!strcmp(dep, current_str))
-        {
-            if (cl_carrier->implement)
-            {
-                return cl_carrier->implement;
-            }
-            else
-            {
-                int idenl = strlen(cl_carrier->header);
-                char *str_carrier = malloc(idenl);
-                str_carrier = strcpy(str_carrier, current_str);
-
-                if (str_carrier[idenl - 2] == '.')
-                    str_carrier[idenl - 2] = 0;
-                return str_carrier;
-            }
-        }
-    }
-    return NULL;
-}
-
-int strsearch(char **haystack, int haystack_length, char *needle)
-{
-
-    for (int i = 0; i < haystack_length; i++)
-    {
-        if (!strcmp(haystack[i], needle))
-        {
-            return 1;
-        }
-    }
-
-    return 0;
-}
-//   Soli Deo Gloria.
+// Soli Deo Gloria.

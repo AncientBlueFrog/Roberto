@@ -7,7 +7,7 @@ enum config_mode
 {
     c_null,
     c_compiler,
-    c_flags,
+    c_options,
     c_libraries,
     c_comment,
 };
@@ -76,7 +76,7 @@ int mmf_config_loader(mcp *profile, FILE *config_input)
             cmode = c_libraries;
             continue;
         case '-':
-            cmode = c_flags;
+            cmode = c_options;
             continue;
         case '|':
             alias = 1;
@@ -109,8 +109,8 @@ int mmf_config_loader(mcp *profile, FILE *config_input)
                 case c_compiler:
                     profile->compiler = address_carrier;
                     break;
-                case c_flags:
-                    stack_add(profile->flags, address_carrier);
+                case c_options:
+                    stack_add(profile->options, address_carrier);
                     break;
                 case c_libraries:
                     if (alias)
@@ -177,10 +177,9 @@ mcp *mmf_profile_init(char *profile_name, int profile_name_length, stack *profil
         mcp *mcp_carrier = stack_get(profile_parent, 0);
         config_profile->libraries = mcp_carrier->libraries;
     }
-    config_profile->flags = stack_init(10, 5);
+    config_profile->options = stack_init(10, 5);
     config_profile->parent = profile_parent;
     config_profile->name = profile_name;
-    config_profile->compiler = NULL;
 
     stack_add(profile_parent, config_profile);
     return config_profile;

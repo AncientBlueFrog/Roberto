@@ -1,3 +1,4 @@
+rm Makefile
 make -B 
 
 cp ./roberto testfolder/

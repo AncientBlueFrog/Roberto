@@ -1,5 +1,6 @@
 #include "lib_mmf.h"
 #include <dirent.h>
+#include <lvds.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -7,7 +8,7 @@
 /*
 Project: Roberto
 Author: AncientBlueFrog
-Version: 1.0(Beta)
+Version: 0.7(Beta)
 */
 
 int add_project(stack *, char *);
@@ -24,7 +25,7 @@ stack *pilha;
 char *version;
 int main(int argc, char *argv[])
 {
-    version = "1.0";
+    version = "0.7";
     profile_name = NULL;
     pilha = stack_init(15, 5);
     config_obj = malloc(sizeof(mcp));
@@ -40,11 +41,7 @@ int main(int argc, char *argv[])
         return 0;
     }
 
-    err_code = initial_setup();
-    if (!err_code)
-    {
-        return 1;
-    }
+    initial_setup();
 
     for (int i = 0; i < pilha->stack_index; i++)
     {
@@ -160,7 +157,7 @@ void help()
 {
     printf("ROBERTO_C - Makefile generator\n");
     printf("Version: %s\n\n", version);
-    printf("See your configurations in ~/.robertoconfig\n\n");
+    printf("See your configurations in ~/.mmfconfig\n\n");
     printf("COMMANDS:\n\n-h: Help screen\n-p: Profile\n\n--language: Learn to configure\n");
 }
 
@@ -178,7 +175,7 @@ int initial_setup()
 
     // Abre o stream.
     char config_path[BUFFERSIZE];
-    snprintf(config_path, BUFFERSIZE, "%s/%s", getenv("HOME"), ".robertoconfig");
+    snprintf(config_path, BUFFERSIZE, "%s/%s", getenv("HOME"), ".mmfconfig");
     FILE *config_file = fopen(config_path, "r+");
     config_obj = create_makefile_buffer(profile_name);
 
@@ -187,17 +184,12 @@ int initial_setup()
     {
         config_file = fopen(config_path, "w+");
         fprintf(config_file, "Default:\n\t>clang\n;\n<\n\tmath.h | m\n>");
-        printf("See your configurations in ~/.robertoconfig\n");
+        printf("See your configurations in ~/.mmfconfig");
     }
     mmf_config_loader(config_obj, config_file);
-    if (!config_obj->compiler)
-    {
-        printf("There's no such profile in .mmfconfig\n");
-        return 0;
-    }
 
     fclose(config_file);
-    return 1;
+    return 0;
 }
 
 // Soli Deo Gloria.

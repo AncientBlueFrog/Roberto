@@ -1,0 +1,3 @@
+1. Repor funções de "append"
+2. Repor metodos de limpeza.
+
