@@ -1,4 +1,3 @@
 make -B 
 
-cp ./roberto testfolder/
-cp ./roberto testfolder/proj2/
+cp ./roberto ~/bin/

@@ -17,6 +17,7 @@ struct c_file_buffer
     stack *function_declarations;
     stack *function_references;
     stack *function_calls;
+    stack *macros;
     stack *headers;
     stack *external_files;
     stack *files;
@@ -45,6 +46,7 @@ enum operation
     no_op,
     inclusion,
     function,
+    definition,
 };
 
 int makefile_generator(project *p, mcp *profile)
@@ -173,13 +175,14 @@ cf_buffer *c_file_interpreter(char *file_name, project *p, mcp *profile, stack *
     buffer_ret->function_references = stack_init(10, 5);
     buffer_ret->function_declarations = stack_init(10, 5);
     buffer_ret->function_calls = stack_init(10, 5);
+    buffer_ret->macros = stack_init(10, 5);
     buffer_ret->external_files = stack_init(10, 5);
     buffer_ret->headers = stack_init(10, 5);
     buffer_ret->history = stack_init(10, 5);
     stack_add(buffer_ret->files, strdup(file_name));
 
     // Stack of identifiears.
-    stack *identifier_stack = stack_init(10, 5);
+    stack *token_stack = stack_init(10, 5);
 
     // Keyworns of C.
     char *keywords[5];
@@ -340,53 +343,62 @@ cf_buffer *c_file_interpreter(char *file_name, project *p, mcp *profile, stack *
             continue;
         }
 
+        // If char is a delimiter
         if (interrupt)
         {
+            // Store identifier in a stack of tokens;
             if (i > 0)
             {
                 identifier[i] = 0;
-                stack_add(identifier_stack, strdup(identifier));
+                stack_add(token_stack, strdup(identifier));
             }
 
-            if (identifier_stack->stack_index > 0)
+            if (token_stack->stack_index > 0)
             {
-                char *identifier_carrier = stack_get(identifier_stack, TOP);
+                char *token_carrier = stack_get(token_stack, TOP);
 
                 switch ((int)op)
                 {
-
+                case definition:
+                    if (!stack_lstr_search(buffer_ret->macros, token_carrier))
+                    {
+                        // printf("\tHEADERS: %s from %s\n", token_carrier, file_name);
+                        stack_add(buffer_ret->macros, strdup(token_carrier));
+                    }
+                    op = no_op;
+                    stack_clear(token_stack);
+                    break;
                 case inclusion:
                     if ((textm == double_quote) && cb == '"')
                     {
-                        if ((!stack_lstr_search(buffer_ret->headers, identifier_carrier)) &&
-                            (!stack_lstr_search(buffer_ret->history, identifier_carrier)))
+                        if (!stack_lstr_search(buffer_ret->headers, token_carrier))
                         {
-                            // printf("\tHEADERS: %s from %s\n", identifier_carrier, file_name);
-                            stack_add(buffer_ret->headers, strdup(identifier_carrier));
+                            // printf("\tHEADERS: %s from %s\n", token_carrier, file_name);
+                            stack_add(buffer_ret->headers, strdup(token_carrier));
                         }
                         op = no_op;
-                        stack_clear(identifier_stack);
+                        stack_clear(token_stack);
                     }
                     else if ((textm == less_greater) && cb == '>')
                     {
-                        if (!stack_lstr_search(buffer_ret->headers, identifier_carrier))
+                        if (!stack_lstr_search(buffer_ret->external_files, token_carrier))
                         {
-                            char *ef_carrier = search_deps(profile->libraries, identifier_carrier);
+                            char *ef_carrier = search_deps(profile->libraries, token_carrier);
 
                             if (ef_carrier)
                             {
-                                // printf("\tTO LINK: %s from %s\n", identifier_carrier, file_name);
+                                // printf("\tTO LINK: %s from %s\n", token_carrier, file_name);
                                 stack_add(buffer_ret->external_files, strdup(ef_carrier));
                             }
                         }
                         op = no_op;
-                        stack_clear(identifier_stack);
+                        stack_clear(token_stack);
                     }
                     break;
                 case function:
                     // infunc 1 and infunc = 4 are invalid.
                     // ';' = 1, '(' = 1, '{' = 2
-                    if (strsearch(keywords, 5, identifier_carrier))
+                    if (strsearch(keywords, 5, token_carrier))
                     {
                         op = no_op;
                         break;
@@ -394,38 +406,38 @@ cf_buffer *c_file_interpreter(char *file_name, project *p, mcp *profile, stack *
 
                     if ((bcount == 0) && (cb == ';')) // 1 * '(' + 1 * ';'.
                     {
-                        if (!stack_lstr_search(buffer_ret->function_declarations, identifier_carrier))
+                        if (!stack_lstr_search(buffer_ret->function_declarations, token_carrier))
                         {
-                            // printf("\tFUNCTION DECLARATIONS: %s from %s\n", identifier_carrier, buffer_ret->name);
-                            stack_add(buffer_ret->function_declarations, strdup(identifier_carrier));
+                            // printf("\tFUNCTION DECLARATIONS: %s from %s\n", token_carrier, buffer_ret->name);
+                            stack_add(buffer_ret->function_declarations, strdup(token_carrier));
                         }
                         op = no_op;
-                        stack_clear(identifier_stack);
+                        stack_clear(token_stack);
                     }
                     else if ((bcount <= 1) && (cb == '{')) // 1 * '(' + 1 * '{'.
                     {
                         // If indentifier != main and identifier != function_references_stack.
-                        if (strcmp(identifier_carrier, "main"))
+                        if (strcmp(token_carrier, "main"))
                         {
-                            if (!stack_lstr_search(buffer_ret->function_references, identifier_carrier))
+                            if (!stack_lstr_search(buffer_ret->function_references, token_carrier))
                             {
-                                // printf("\tFUNCTION REFERENCES: %s from %s(line %d)\n", identifier_carrier,
+                                // printf("\tFUNCTION REFERENCES: %s from %s(line %d)\n", token_carrier,
                                 //        buffer_ret->name, linec);
-                                stack_add(buffer_ret->function_references, strdup(identifier_carrier));
+                                stack_add(buffer_ret->function_references, strdup(token_carrier));
                             }
                         }
                         op = no_op;
-                        stack_clear(identifier_stack);
+                        stack_clear(token_stack);
                     }
                     else if ((bcount >= 1) && (cb == '('))
                     {
-                        if (!stack_lstr_search(buffer_ret->function_calls, identifier_carrier))
+                        if (!stack_lstr_search(buffer_ret->function_calls, token_carrier))
                         {
-                            // printf("\tFUNCTION CALLS: %s from %s\n", identifier_carrier, buffer_ret->name);
-                            stack_add(buffer_ret->function_calls, strdup(identifier_carrier));
+                            // printf("\tFUNCTION CALLS: %s from %s\n", token_carrier, buffer_ret->name);
+                            stack_add(buffer_ret->function_calls, strdup(token_carrier));
                         }
                         op = no_op;
-                        stack_clear(identifier_stack);
+                        stack_clear(token_stack);
                     }
                     break;
                 }
@@ -437,9 +449,16 @@ cf_buffer *c_file_interpreter(char *file_name, project *p, mcp *profile, stack *
                 }
 
                 // Define the mode of next identifier.
-                if ((blockm == hashtag) && !strcmp(identifier_carrier, "include"))
+                if (blockm == hashtag)
                 {
-                    op = inclusion;
+                    if (!strcmp(token_carrier, "include"))
+                    {
+                        op = inclusion;
+                    }
+                    else if (!strcmp(token_carrier, "define"))
+                    {
+                        op = definition;
+                    }
                 }
 
                 if (cb == '(')
@@ -504,12 +523,12 @@ cf_buffer *c_file_interpreter(char *file_name, project *p, mcp *profile, stack *
     {
         header_carrier = stack_get(header_name_stack, i);
 
-        if (!strcmp(lib_carrier, file_name))
+        if (!strcmp(header_carrier, file_name))
         {
             continue;
         }
 
-        if (stack_lstr_search(buffer_ret->history, lib_carrier))
+        if (stack_lstr_search(buffer_ret->history, header_carrier))
         {
             continue;
         }
@@ -527,6 +546,7 @@ cf_buffer *c_file_interpreter(char *file_name, project *p, mcp *profile, stack *
         stack_str_append(buffer_ret->external_files, header_buffer->external_files);
         stack_str_append(buffer_ret->function_declarations, header_buffer->function_declarations);
         stack_str_append(buffer_ret->function_references, header_buffer->function_references);
+        stack_str_append(buffer_ret->macros, header_buffer->macros);
         stack_str_append(buffer_ret->history, header_buffer->history);
 
         // cf_buffer_clear(header_buffer);
@@ -556,6 +576,7 @@ cf_buffer *c_file_interpreter(char *file_name, project *p, mcp *profile, stack *
                 stack_str_append(buffer_ret->function_declarations, lib_buffer->function_declarations);
                 stack_str_append(buffer_ret->function_references, lib_buffer->function_references);
                 stack_str_append(buffer_ret->function_calls, lib_buffer->function_calls);
+                stack_str_append(buffer_ret->macros, lib_buffer->macros);
                 // stack_str_append(buffer_ret->history, lib_buffer->history);
                 stack_str_append(buffer_ret->files, lib_buffer->files);
                 break;
