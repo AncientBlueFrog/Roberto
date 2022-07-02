@@ -2,6 +2,24 @@
 #include <obj_stack.h>
 #include <stdio.h>
 
+// Macros
+enum text_mode
+{
+    code,
+    double_slash,
+    slash_asterisk,
+    quote,
+    double_quote,
+    less_greater,
+};
+
+enum block_mode
+{
+    no_block,
+    hashtag,
+    parenthesis,
+};
+
 typedef struct
 {
     char *header;
@@ -18,7 +36,6 @@ struct Project
     stack *lib_stack;
     stack *headers;
 };
-extern int teste;
 typedef struct makefile_config_profile
 {
     char *compiler;
@@ -35,9 +52,9 @@ void close_project(project *);
 
 // mmf_config
 int mmf_config_loader(mcp *, FILE *);
-void mmf_remove_profile(mcp *);
-mcp *mmf_profile_init(char *, int, stack *);
-mcp *create_makefile_buffer(char *);
+void close_profile(mcp *);
+mcp *mmf_profile_init(char *, stack *);
+mcp *create_config_buffer(char *);
 
 // mmf_data_processor
 int makefile_generator(project *, mcp *);

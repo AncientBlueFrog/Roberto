@@ -1,5 +1,4 @@
 #include "lib_mmf.h"
-#include <lvds.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -22,23 +21,6 @@ struct c_file_buffer
     stack *external_files;
     stack *files;
     stack *history;
-};
-
-enum text_mode
-{
-    code,
-    double_slash,
-    slash_asterisk,
-    quote,
-    double_quote,
-    less_greater,
-};
-
-enum block_mode
-{
-    no_block,
-    hashtag,
-    parenthesis,
 };
 
 enum operation
@@ -65,7 +47,7 @@ int makefile_generator(project *p, mcp *profile)
 
     // All
     fprintf(makefile, "all: ");
-    for (int i = 0; i < execs->stack_index; i++)
+    for (int i = 0; i < execs->index; i++)
     {
         file_buffer = c_file_interpreter((char *)stack_get(execs, i), p, profile, NULL);
 
@@ -76,7 +58,7 @@ int makefile_generator(project *p, mcp *profile)
     fprintf(makefile, "\n");
 
     // Projecs
-    for (int i = 0; i < fb_stack->stack_index; i++)
+    for (int i = 0; i < fb_stack->index; i++)
     {
         file_buffer = stack_get(fb_stack, i);
         fprintf(makefile, "%s", file_buffer->name);
@@ -87,7 +69,7 @@ int makefile_generator(project *p, mcp *profile)
 
         // Internal headers.
         stack *stack_i_headers = file_buffer->headers;
-        for (int j = 0; j < stack_i_headers->stack_index; j++)
+        for (int j = 0; j < stack_i_headers->index; j++)
         {
             fprintf(makefile, "%s ", (char *)stack_get(stack_i_headers, j));
         }
@@ -99,7 +81,7 @@ int makefile_generator(project *p, mcp *profile)
         // Flags.
         stack *stack_options = profile->flags;
 
-        for (int j = 0; j < stack_options->stack_index; j++)
+        for (int j = 0; j < stack_options->index; j++)
         {
             fprintf(makefile, "-%s ", (char *)stack_get(stack_options, j));
         }
@@ -107,7 +89,7 @@ int makefile_generator(project *p, mcp *profile)
         // Files.
         stack *stack_files = file_buffer->files;
 
-        for (int j = 0; j < stack_files->stack_index; j++)
+        for (int j = 0; j < stack_files->index; j++)
         {
             if (!stack_lstr_search(stack_i_headers, (char *)stack_get(stack_files, j)))
             {
@@ -122,7 +104,7 @@ int makefile_generator(project *p, mcp *profile)
         // External headers.
         stack *stack_e_headers = file_buffer->external_files;
 
-        for (int j = 0; j < stack_e_headers->stack_index; j++)
+        for (int j = 0; j < stack_e_headers->index; j++)
         {
             fprintf(makefile, "-l%s ", (char *)stack_get(stack_e_headers, j));
         }
@@ -135,6 +117,7 @@ int makefile_generator(project *p, mcp *profile)
     // closing.
     fclose(makefile);
     close_project(p);
+    stack_destroy(fb_stack);
 
     return 1;
 }
@@ -179,12 +162,13 @@ cf_buffer *c_file_interpreter(char *file_name, project *p, mcp *profile, stack *
     buffer_ret->external_files = stack_init(10, 5);
     buffer_ret->headers = stack_init(10, 5);
     buffer_ret->history = stack_init(10, 5);
+
     stack_add(buffer_ret->files, strdup(file_name));
 
     // Stack of identifiears.
     stack *token_stack = stack_init(10, 5);
 
-    // Keyworns of C.
+    // Keywords of C.
     char *keywords[5];
     keywords[0] = "if";
     keywords[1] = "else";
@@ -193,8 +177,8 @@ cf_buffer *c_file_interpreter(char *file_name, project *p, mcp *profile, stack *
     keywords[4] = "do";
 
     // Delimiters for tokens.
-    char delim[] = {32,  10,  '#', '=', '-', ';', '+', '*', '|', '!', '%', '&', '(',
-                    ')', '/', '<', '>', '{', '}', '[', ']', ',', '"', ':', '?', 0};
+    char delim[] = {32,  10,  '#', '=', '-', ';', '+', '*', '|', '!',  '%', '&', '(', ')',
+                    '/', '<', '>', '{', '}', '[', ']', ',', '"', '\'', ':', '?', 0};
 
     // History of recursion.
     if (history)
@@ -213,6 +197,7 @@ cf_buffer *c_file_interpreter(char *file_name, project *p, mcp *profile, stack *
         interrupt = strchr(delim, cb);
         if (cb == EOF)
         {
+            continue;
             // printf("EOF\n");
         }
 
@@ -353,9 +338,9 @@ cf_buffer *c_file_interpreter(char *file_name, project *p, mcp *profile, stack *
                 stack_add(token_stack, strdup(identifier));
             }
 
-            if (token_stack->stack_index > 0)
+            if (token_stack->index > 0)
             {
-                char *token_carrier = stack_get(token_stack, TOP);
+                char *token_carrier = stack_get(token_stack, STACK_TOP);
 
                 switch ((int)op)
                 {
@@ -388,7 +373,7 @@ cf_buffer *c_file_interpreter(char *file_name, project *p, mcp *profile, stack *
                             if (ef_carrier)
                             {
                                 // printf("\tTO LINK: %s from %s\n", token_carrier, file_name);
-                                stack_add(buffer_ret->external_files, strdup(ef_carrier));
+                                stack_add(buffer_ret->external_files, ef_carrier);
                             }
                         }
                         op = no_op;
@@ -477,12 +462,13 @@ cf_buffer *c_file_interpreter(char *file_name, project *p, mcp *profile, stack *
         }
     }
 
+    stack_close(token_stack);
     fclose(file);
 
     // Recursivelly adding files.
     // Lists lib files.
     stack *lib_name_stack = p->lib_stack;
-    cf_buffer *lib_buffer;
+    cf_buffer *lib_buffer, *header_buffer;
     stack *lib_buffer_stack = stack_init(10, 5);
     char *lib_carrier;
     stack *stack_function = buffer_ret->function_calls;
@@ -490,7 +476,8 @@ cf_buffer *c_file_interpreter(char *file_name, project *p, mcp *profile, stack *
     stack *header_name_stack = buffer_ret->headers;
     char *header_carrier;
 
-    for (int i = 0; i < lib_name_stack->stack_index; i++)
+    // Create the library buffers.
+    for (int i = 0; i < lib_name_stack->index; i++)
     {
         lib_carrier = (char *)stack_get(lib_name_stack, i);
         if (!strcmp(lib_carrier, file_name))
@@ -504,7 +491,7 @@ cf_buffer *c_file_interpreter(char *file_name, project *p, mcp *profile, stack *
         }
 
         /* printf("History: ");
-        for (int j = 0; j < buffer_ret->history->stack_index; j++)
+        for (int j = 0; j < buffer_ret->history->index; j++)
         {
             printf("%s, ", (char *)stack_get(buffer_ret->history, j));
         }
@@ -519,7 +506,7 @@ cf_buffer *c_file_interpreter(char *file_name, project *p, mcp *profile, stack *
         stack_add(lib_buffer_stack, lib_buffer);
     }
 
-    for (int i = 0; i < header_name_stack->stack_index; i++)
+    for (int i = 0; i < header_name_stack->index; i++)
     {
         header_carrier = stack_get(header_name_stack, i);
 
@@ -534,7 +521,7 @@ cf_buffer *c_file_interpreter(char *file_name, project *p, mcp *profile, stack *
         }
 
         // printf("goto %s\n", identifier);
-        cf_buffer *header_buffer = c_file_interpreter(header_carrier, p, profile, buffer_ret->history);
+        header_buffer = c_file_interpreter(header_carrier, p, profile, buffer_ret->history);
         // printf("%s:\n", file_name);
 
         if (!header_buffer)
@@ -549,19 +536,20 @@ cf_buffer *c_file_interpreter(char *file_name, project *p, mcp *profile, stack *
         stack_str_append(buffer_ret->macros, header_buffer->macros);
         stack_str_append(buffer_ret->history, header_buffer->history);
 
-        // cf_buffer_clear(header_buffer);
+        cf_buffer_clear(header_buffer);
     }
 
-    for (int i = 0; i < stack_function->stack_index; i++)
+    // Check whether the functions from stack_function are present in the lib buffers.
+    for (int i = 0; i < stack_function->index; i++)
     {
-        for (int j = 0; j < lib_buffer_stack->stack_index; j++)
+        for (int j = 0; j < lib_buffer_stack->index; j++)
         {
             lib_buffer = stack_get(lib_buffer_stack, j);
             /*
             if (!strcmp(lib_buffer->name, "roberto_data_processor"))
             {
                 printf("%s {\n ", (char *)stack_get(stack_function, i));
-                for (int k = 0; k < lib_buffer->function_references->stack_index; k++)
+                for (int k = 0; k < lib_buffer->function_references->index; k++)
                 {
                     printf("%s, ", (char *)stack_get(lib_buffer->function_references, k));
                 }
@@ -585,16 +573,17 @@ cf_buffer *c_file_interpreter(char *file_name, project *p, mcp *profile, stack *
         }
     }
 
-    for (int i = 0; i < lib_buffer_stack->stack_index; i++)
+    // Cleaning library buffers.
+    for (int i = 0; i < lib_buffer_stack->index; i++)
     {
         lib_buffer = stack_get(lib_buffer_stack, i);
 
         cf_buffer_clear(lib_buffer);
     }
-    stack_close(lib_buffer_stack);
+    stack_destroy(lib_buffer_stack);
 
     /* printf("%s{\n", buffer_ret->name);
-    for (int i = 0; i < buffer_ret->files->stack_index; i++)
+    for (int i = 0; i < buffer_ret->files->index; i++)
     {
         printf("%s, ", (char *)stack_get(buffer_ret->files, i));
     }
@@ -611,7 +600,10 @@ void cf_buffer_clear(cf_buffer *b)
     stack_close(b->function_calls);
     stack_close(b->function_declarations);
     stack_close(b->function_references);
+    stack_close(b->history);
+    stack_close(b->macros);
     free(b->name);
+    free(b);
 }
 
 // search for deps
@@ -619,7 +611,7 @@ char *search_deps(stack *haystack, char *dep)
 {
     // stack(libraries) > config_lib > char *
     char *current_str;
-    for (int i = 0; i < haystack->stack_index; i++)
+    for (int i = 0; i < haystack->index; i++)
     {
         config_lib *cl_carrier = stack_get(haystack, i);
         current_str = cl_carrier->header;
@@ -627,12 +619,16 @@ char *search_deps(stack *haystack, char *dep)
         {
             if (cl_carrier->implement)
             {
-                return cl_carrier->implement;
+                return strdup(cl_carrier->implement);
             }
             else
             {
                 int idenl = strlen(cl_carrier->header);
                 char *str_carrier = malloc(idenl);
+
+                if (!str_carrier)
+                    return 0;
+
                 str_carrier = strcpy(str_carrier, current_str);
 
                 if (str_carrier[idenl - 2] == '.')

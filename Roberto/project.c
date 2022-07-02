@@ -33,7 +33,11 @@ int define_strings(project *p, char *path)
     // Alocating memory.
     p->path_length = arrSize + 1;
     char *filename = malloc(p->path_length + 8);
+
     p->path = malloc(p->path_length);
+
+    if ((!p->path) && (!filename))
+        return 0;
 
     // Copy the string path to project path and filename.
     p->path = strcpy(p->path, path);
@@ -108,6 +112,8 @@ int define_files(project *p)
             {
                 stack_add(p->lib_stack, name_string);
             }
+
+            fclose(f);
         }
         else if ((dc->d_name[name_length - 2] == '.') && (dc->d_name[name_length - 1] == 'o'))
         {
@@ -128,7 +134,7 @@ int define_files(project *p)
 
 void close_project(project *p)
 {
-    // Close Makefile.
+    // Close Makefile path.
     free(p->makefile);
 
     // Close dir.
@@ -136,9 +142,6 @@ void close_project(project *p)
 
     // Close path.
     free(p->path);
-
-    // Close project.
-    free(p);
 
     // Close stack of execs.
     stack_close(p->exec_stack);
@@ -148,9 +151,106 @@ void close_project(project *p)
 
     // Close stack of headers.
     stack_close(p->headers);
+
+    // Close project.
+    free(p);
 }
 
-int is_exec(FILE *f)
+int is_exec(FILE *file)
+{
+    if (!file)
+    {
+        return 0;
+    }
+
+    // Function variables.
+    char identifier[32] = {};
+    int i = 0, cb = 0;
+    char *interrupt;
+    enum text_mode next_textm = code;
+
+    // Keywords of C.
+    char *keywords[5];
+    keywords[0] = "if";
+    keywords[1] = "else";
+    keywords[2] = "while";
+    keywords[3] = "for";
+    keywords[4] = "do";
+
+    // Delimiters for tokens.
+    char delim[] = {32, 10, '(', ')', 0, ';'};
+
+    while (cb != EOF)
+    {
+        cb = fgetc(file);
+
+        interrupt = strchr(delim, cb);
+
+        // Switch for modes.
+        switch (cb)
+        {
+        case '/':
+            cb = fgetc(file);
+            if (cb == '/')
+            {
+                if (next_textm == code)
+                    next_textm = double_slash;
+            }
+            else if (cb == '*')
+            {
+                if (next_textm == code)
+                    next_textm = slash_asterisk;
+            }
+            break;
+        case '*':
+            if (next_textm == slash_asterisk)
+            {
+                cb = fgetc(file);
+                if (cb == '/')
+                    next_textm = code;
+            }
+            if (identifier[0] == '/')
+            {
+                if (next_textm == code)
+                    next_textm = slash_asterisk;
+            }
+            break;
+        }
+
+        // Continue to while if it is a comment.
+        if ((next_textm == slash_asterisk) || (next_textm == double_slash))
+        {
+            continue;
+        }
+
+        // If char is a delimiter
+        if (interrupt)
+        {
+            identifier[i] = 0;
+
+            if (!strcmp(identifier, "main"))
+                return 1;
+
+            while (i > 0)
+            {
+                identifier[i] = 0;
+                i--;
+            }
+        }
+        else
+        {
+            if (i < 31)
+            {
+                identifier[i] = (char)cb;
+                i++;
+            }
+        }
+    }
+
+    return 0;
+}
+
+int is_exec_old(FILE *f)
 {
     char identifier[64] = {};
     int i = 0;

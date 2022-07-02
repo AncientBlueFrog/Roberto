@@ -27,7 +27,6 @@ int main(int argc, char *argv[])
     version = "1.1";
     profile_name = NULL;
     pilha = stack_init(15, 5);
-    config_obj = malloc(sizeof(mcp));
 
     err_code = arg_switch(argc, argv, pilha);
 
@@ -46,7 +45,8 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    for (int i = 0; i < pilha->stack_index; i++)
+    // iterate for creating makefiles.
+    for (int i = 0; i < pilha->index; i++)
     {
         err_code = makefile_generator(stack_get(pilha, i), config_obj);
 
@@ -55,6 +55,10 @@ int main(int argc, char *argv[])
             return 0;
         }
     }
+
+    close_profile(config_obj);
+
+    stack_destroy(pilha);
 }
 
 int arg_switch(int argc, char **argv, stack *pilha)
@@ -118,7 +122,6 @@ int add_project(stack *project_stack, char *file_name)
 {
     int filel = 0;
     int last_slash = 0;
-    // char *directory_name = malloc(strlen(file_name + 2));
 
     while (file_name[filel])
     {
@@ -140,7 +143,7 @@ int add_project(stack *project_stack, char *file_name)
         }
     }
 
-    for (int i = 0; i < project_stack->stack_index; i++)
+    for (int i = 0; i < project_stack->index; i++)
     {
         // Puxa um projeto da pilha.
         project *aproject = stack_get(project_stack, i);
@@ -161,7 +164,8 @@ void help()
     printf("ROBERTO_C - Makefile generator\n");
     printf("Version: %s\n\n", version);
     printf("See your configurations in ~/.robertoconfig\n\n");
-    printf("COMMANDS:\n\n-h: Help screen\n-p: Profile\n\n--language: Learn to configure\n");
+    printf("COMMANDS:\n\n-h: Help screen\n-p: Profile\n\n--language: Learn to "
+           "configure\n");
 }
 
 int initial_setup()
@@ -171,7 +175,7 @@ int initial_setup()
         profile_name = "Default";
     }
 
-    if (!pilha->stack_index)
+    if (!pilha->index)
     {
         stack_add(pilha, create_project("."));
     }
@@ -180,15 +184,17 @@ int initial_setup()
     char config_path[BUFFERSIZE];
     snprintf(config_path, BUFFERSIZE, "%s/%s", getenv("HOME"), ".robertoconfig");
     FILE *config_file = fopen(config_path, "r+");
-    config_obj = create_makefile_buffer(profile_name);
+    config_obj = create_config_buffer(profile_name);
 
-    // Se o arquivo de configuração não foi criado, criar o arquivo de configuração.
+    // Se o arquivo de configuração não foi criado, criar o arquivo de
+    // configuração.
     if (!config_file)
     {
         config_file = fopen(config_path, "w+");
         fprintf(config_file, "Default:\n\t>clang\n;\n<\n\tmath.h | m\n>");
         printf("See your configurations in ~/.robertoconfig\n");
     }
+
     mmf_config_loader(config_obj, config_file);
     if (!config_obj->compiler)
     {

@@ -69,7 +69,7 @@ int mmf_config_loader(mcp *profile, FILE *config_input)
 
             if (!profile)
             {
-                profile = mmf_profile_init(identifier, i, profile_stack);
+                profile = mmf_profile_init(identifier, profile_stack);
             }
             continue;
         case '<':
@@ -94,11 +94,9 @@ int mmf_config_loader(mcp *profile, FILE *config_input)
             {
                 char *address_carrier;
 
-                // Execute the remove mode method and avoid allocating memory.
                 if ((cmode) && (cb != ';') && (cmode != c_comment))
                 {
-                    address_carrier = malloc(i + 1);
-                    address_carrier = strcpy(address_carrier, identifier);
+                    address_carrier = strdup(identifier);
                 }
 
                 identifier[i] = 0;
@@ -155,9 +153,8 @@ int mmf_config_loader(mcp *profile, FILE *config_input)
     return 1;
 }
 
-mcp *mmf_profile_init(char *profile_name, int profile_name_length, stack *profile_parent)
+mcp *mmf_profile_init(char *profile_name, stack *profile_parent)
 {
-    char *address_carrier;
     mcp *config_profile = malloc(sizeof(mcp));
 
     if (!config_profile)
@@ -165,10 +162,7 @@ mcp *mmf_profile_init(char *profile_name, int profile_name_length, stack *profil
         return NULL;
     }
 
-    address_carrier = malloc(profile_name_length + 1);
-    address_carrier = strcpy(address_carrier, profile_name);
-
-    if (profile_parent->stack_index == 0)
+    if (profile_parent->index == 0)
     {
         config_profile->libraries = stack_init(10, 5);
     }
@@ -179,16 +173,15 @@ mcp *mmf_profile_init(char *profile_name, int profile_name_length, stack *profil
     }
     config_profile->flags = stack_init(10, 5);
     config_profile->parent = profile_parent;
-    config_profile->name = profile_name;
+    config_profile->name = strdup(profile_name);
     config_profile->compiler = NULL;
 
     stack_add(profile_parent, config_profile);
     return config_profile;
 }
 
-mcp *create_makefile_buffer(char *profile_name)
+mcp *create_config_buffer(char *profile_name)
 {
-    int profile_name_length = strlen(profile_name);
     stack *profile_parent = stack_init(10, 5);
 
     if (!profile_parent)
@@ -196,7 +189,7 @@ mcp *create_makefile_buffer(char *profile_name)
         return NULL;
     }
 
-    return mmf_profile_init(profile_name, profile_name_length, profile_parent);
+    return mmf_profile_init(profile_name, profile_parent);
 }
 
 mcp *search_profile(mcp *profile, char *profile_name)
@@ -205,7 +198,7 @@ mcp *search_profile(mcp *profile, char *profile_name)
 
     stack *profile_stack = profile->parent;
 
-    for (int i = 0; i < profile_stack->stack_index; i++)
+    for (int i = 0; i < profile_stack->index; i++)
     {
         profile_ret = stack_get(profile_stack, i);
 
@@ -215,5 +208,35 @@ mcp *search_profile(mcp *profile, char *profile_name)
         }
     }
     return NULL;
+}
+
+void close_profile(mcp *p)
+{ // Cleaning profiles.
+    stack *profile_stack = p->parent;
+    stack *libraries_stack = p->libraries;
+
+    mcp *profile_carrier;
+    for (int i = 0; i < profile_stack->index; i++)
+    {
+        profile_carrier = stack_get(profile_stack, i);
+
+        free(profile_carrier->name);
+        if (profile_carrier->compiler)
+            free(profile_carrier->compiler);
+        stack_close(profile_carrier->flags);
+    }
+
+    config_lib *library_carrier;
+    for (int i = 0; i < libraries_stack->index; i++)
+    {
+        library_carrier = stack_get(libraries_stack, i);
+
+        free(library_carrier->header);
+        if (library_carrier->implement)
+            free(library_carrier->implement);
+    }
+
+    stack_close(p->libraries);
+    stack_close(profile_stack);
 }
 // Soli Deo Gloria.
