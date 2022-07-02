@@ -7,7 +7,7 @@
 /*
 Project: Roberto
 Author: AncientBlueFrog
-Version: 1.1
+Version: 1.3
 */
 
 int add_project(stack *, char *);
@@ -24,7 +24,7 @@ stack *pilha;
 char *version;
 int main(int argc, char *argv[])
 {
-    version = "1.1";
+    version = "1.3";
     profile_name = NULL;
     pilha = stack_init(15, 5);
 
