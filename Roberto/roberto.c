@@ -58,7 +58,7 @@ int main(int argc, char *argv[])
 
     close_profile(config_obj);
 
-    stack_destroy(pilha);
+    stack_erase(pilha);
 }
 
 int arg_switch(int argc, char **argv, stack *pilha)

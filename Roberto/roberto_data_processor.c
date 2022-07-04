@@ -117,7 +117,7 @@ int makefile_generator(project *p, mcp *profile)
     // closing.
     fclose(makefile);
     close_project(p);
-    stack_destroy(fb_stack);
+    stack_erase(fb_stack);
 
     return 1;
 }
@@ -580,7 +580,7 @@ cf_buffer *c_file_interpreter(char *file_name, project *p, mcp *profile, stack *
 
         cf_buffer_clear(lib_buffer);
     }
-    stack_destroy(lib_buffer_stack);
+    stack_erase(lib_buffer_stack);
 
     /* printf("%s{\n", buffer_ret->name);
     for (int i = 0; i < buffer_ret->files->index; i++)
