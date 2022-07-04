@@ -1,13 +1,13 @@
 #ifndef OBJ_STACK_C
 #define OBJ_STACK_C
-#define TOP -1
+#define STACK_TOP -1
 
 struct obj_stack
 {
     int step;
     void **array;
     int length;
-    int stack_index;
+    int index;
 };
 
 typedef struct obj_stack stack;
@@ -17,6 +17,7 @@ void stack_remove(struct obj_stack *cs);
 void *stack_get(struct obj_stack *cs, int index);
 void stack_set(struct obj_stack *cs, void *obj, int index); // Set NULL pointer to remove elemente by index.
 void stack_close(struct obj_stack *cs);
+void stack_erase(struct obj_stack *cs);
 void stack_clear(struct obj_stack *cs);
 int stack_lstr_search(stack *cs, char *value);
 int stack_str_append(stack *, stack *);
